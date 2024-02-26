@@ -69,7 +69,7 @@ wait_for_file = PythonOperator(
     dag=dag,
 )
 
-bash_command = "/home/jwang/jwang8_test/venv/SF_connection/bin/python3 /elt/py_pipeline/LND_L0_WAREHOUSE_INVENTORY_EBS_DAILY.py"
+bash_command = "/elt/venv/SnowflakeETL/bin/python3 /elt/py_pipeline/LND_L0_WAREHOUSE_INVENTORY_EBS_DAILY.py"
 
 snowflake_ops_bash = BashOperator(
     task_id='snowflake_operations',

@@ -1,20 +1,7 @@
+
 import os
 from datetime import datetime, timedelta
 import logging
-
-# Create a directory for logs based on the current date
-current_date = datetime.now().strftime("%Y-%m-%d")
-log_directory = f'/elt/logs/jwang_app_log/{current_date}' 
-if not os.path.exists(log_directory):
-    os.makedirs(log_directory)
-
-# Configure logging to create a dynamic file name including the current date
-log_file_name = f'{log_directory}/LND_L0_WAREHOUSE_INVENTORY_EBS_DAILY_{current_date}.log'
-logging.basicConfig(level=logging.ERROR,
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    handlers=[logging.FileHandler(log_file_name),
-                              logging.StreamHandler()])
-
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.operators.bash_operator import BashOperator
@@ -23,7 +10,20 @@ import pandas as pd
 import pendulum
 import sys
 
-local_tz = pendulum.timezone("America/New_York") #EST set for airflow
+                              
+# custom package is in '/elt/PyPkg/'
+sys.path.append('/elt/PyPkg/')
+# Import the custom utility functions
+
+from logger_setup import LoggerSetup
+from cp_file_operater import direct_copy_file
+
+# logger setup
+Logger_LND_L0_WAREHOUSE_INVENTORY_EBS_DAILY = LoggerSetup(app_name='LND_L0_WAREHOUSE_INVENTORY_EBS_DAILY',log_level=logging.ERROR)
+Logger_LND_L0_WAREHOUSE_INVENTORY_EBS_DAILY.configure_logging()
+
+# EST set for airflow
+local_tz = pendulum.timezone("America/New_York") 
 
 def wait_for_file_update(file_path, timeout=1200, poke_interval=30, **kwargs):
     start_time = time.time()
@@ -45,7 +45,7 @@ def wait_for_file_update(file_path, timeout=1200, poke_interval=30, **kwargs):
 default_args = {
     'owner': 'jwang8',
     'depends_on_past': False,
-    'start_date': datetime(2024, 2, 12),
+    'start_date': datetime(2024, 2, 27),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -53,7 +53,7 @@ default_args = {
 }
 
 dag = DAG(
-    'JWANG_LND_L0_WAREHOUSE_INVENTORY_EBS_DAILY',
+    'JWANG_LOAD_LND_L0_WAREHOUSE_INVENTORY_EBS_DAILY',
     default_args=default_args,
     description='DAG for Warehouse Inventory Updates',
     schedule_interval='0 9 * * *',
@@ -69,7 +69,8 @@ wait_for_file = PythonOperator(
     dag=dag,
 )
 
-bash_command = "/elt/venv/SnowflakeETL/bin/python3 /elt/py_pipeline/LND_L0_WAREHOUSE_INVENTORY_EBS_DAILY.py"
+#bash_command = "/elt/venv/SnowflakeETL/bin/python3 /elt/py_pipeline/LOAD_L0_WAREHOUSE_INVENTORY_EBS_DAILY.py"
+bash_command = "source /elt/venv/SnowflakeETL/bin/activate && python3 /elt/py_pipeline/LOAD_L0_WAREHOUSE_INVENTORY_EBS_DAILY.py"
 
 snowflake_ops_bash = BashOperator(
     task_id='snowflake_operations',
@@ -77,4 +78,14 @@ snowflake_ops_bash = BashOperator(
     dag=dag,
 )
 
-wait_for_file >> snowflake_ops_bash
+current_date_str = datetime.now().strftime("%Y-%m-%d")
+
+copy_file_task = PythonOperator(
+    task_id='copy_file_from_mnt_to_elt',
+    python_callable=direct_copy_file,
+    op_kwargs={'src_file_path': file_path,
+               'des_file_path': f'/elt/data_bucket/GW_Inv/csv_inventory_availability_{current_date_str}.csv'},
+    dag=dag,
+)
+
+wait_for_file >> snowflake_ops_bash >> copy_file_task

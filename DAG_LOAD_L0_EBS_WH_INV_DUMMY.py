@@ -1,6 +1,6 @@
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import logging
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
@@ -19,11 +19,11 @@ from logger_setup import LoggerSetup
 from cp_file_operater import direct_copy_file
 
 # logger setup
-Logger_LND_L0_WAREHOUSE_INVENTORY_EBS_DAILY = LoggerSetup(app_name='LND_L0_WAREHOUSE_INVENTORY_EBS_DAILY',log_level=logging.ERROR)
+Logger_LND_L0_WAREHOUSE_INVENTORY_EBS_DAILY = LoggerSetup(app_name='LND_L0_EBS_WH_INV_DUMMY',log_level=logging.ERROR)
 Logger_LND_L0_WAREHOUSE_INVENTORY_EBS_DAILY.configure_logging()
 
 # EST set for airflow
-local_tz = pendulum.timezone("America/Toronto") 
+local_tz = pendulum.timezone("America/Toronto")
 start_date = pendulum.datetime(2024, 3, 28, tz=local_tz)
 
 def wait_for_file_update(file_path, timeout=1200, poke_interval=30, **kwargs):
@@ -54,15 +54,21 @@ default_args = {
 }
 
 dag = DAG(
-    'JWANG8_LOAD_LND_L0_WAREHOUSE_INVENTORY_EBS_DAILY',
+    'JWANG8_LOAD_LND_INT_L0_L1_EBS_WH_INV_DUMMY',
     default_args=default_args,
-    description='DAG for Warehouse Inventory Updates',
-    schedule_interval='0 9 * * *',
+    description='DAG for EBS_WH_INV_DUMMY Updates',
+    schedule_interval='05 9 * * *',
     #timezone=local_tz,
     catchup=False,
 )
 
-file_path = '/mnt1/JaysonReports/GW_Inv/csv_inventory_availability.csv'
+# datetime object containing current date and time
+now = datetime.now()
+Date = (date.today() - timedelta(days=0)).strftime('%Y%m%d')
+
+
+# Move File from Share drive to Local
+file_path = '/mnt1/JaysonReports/GW_Inv/GW_INV_Dummy_Authentic-'+ Date +'.csv'
 
 wait_for_file = PythonOperator(
     task_id='wait_for_file_update',
@@ -72,7 +78,7 @@ wait_for_file = PythonOperator(
 )
 
 #bash_command = "/elt/venv/SnowflakeETL/bin/python3 /elt/py_pipeline/LOAD_L0_WAREHOUSE_INVENTORY_EBS_DAILY.py"
-bash_command = "source /elt/venv/SnowflakeETL/bin/activate && python3 /elt/py_pipeline/LOAD_L0_WAREHOUSE_INVENTORY_EBS_DAILY.py"
+bash_command = "source /elt/venv/SnowflakeETL/bin/activate && python3 /elt/py_pipeline/LOAD_L0_EBS_WH_INV_DUMMY.py"
 
 snowflake_ops_bash = BashOperator(
     task_id='snowflake_operations',
@@ -80,14 +86,5 @@ snowflake_ops_bash = BashOperator(
     dag=dag,
 )
 
-current_date_str = datetime.now().strftime("%Y-%m-%d")
 
-copy_file_task = PythonOperator(
-    task_id='copy_file_from_mnt_to_elt',
-    python_callable=direct_copy_file,
-    op_kwargs={'src_file_path': file_path,
-               'des_file_path': f'/elt/data_bucket/GW_Inv/csv_inventory_availability_{current_date_str}.csv'},
-    dag=dag,
-)
-
-wait_for_file >> snowflake_ops_bash >> copy_file_task
+wait_for_file >> snowflake_ops_bash 

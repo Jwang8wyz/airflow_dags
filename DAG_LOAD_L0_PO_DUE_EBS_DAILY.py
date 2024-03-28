@@ -23,7 +23,8 @@ Logger_LND_L0_WAREHOUSE_INVENTORY_EBS_DAILY = LoggerSetup(app_name='LND_L0_PO_DU
 Logger_LND_L0_WAREHOUSE_INVENTORY_EBS_DAILY.configure_logging()
 
 # EST set for airflow
-local_tz = pendulum.timezone("America/New_York") 
+local_tz = pendulum.timezone("America/Toronto")
+start_date = pendulum.datetime(2024, 3, 28, tz=local_tz)
 
 def wait_for_file_update(file_path, timeout=1200, poke_interval=30, **kwargs):
     start_time = time.time()
@@ -45,7 +46,7 @@ def wait_for_file_update(file_path, timeout=1200, poke_interval=30, **kwargs):
 default_args = {
     'owner': 'jwang8',
     'depends_on_past': False,
-    'start_date': datetime(2024, 3, 23),
+    'start_date': start_date,
     'email_on_failure': False,
     'email_on_retry': False,
     #'retries': 1,
@@ -53,10 +54,11 @@ default_args = {
 }
 
 dag = DAG(
-    'JWANG_LOAD_LND_INT_L0_PO_DUE_EBS_DAILY',
+    'JWANG8_LOAD_LND_INT_L0_PO_DUE_EBS_DAILY',
     default_args=default_args,
     description='DAG for PO_DUE_EBS_DAILY Updates',
     schedule_interval='30 8 * * *',
+    #timezone=local_tz,
     catchup=False,
 )
 
